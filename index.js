@@ -15,7 +15,10 @@ export const pool = new Pool({
     port: 5432,
 })
 
-app.use(cors())
+app.use(cors({
+    origin: ['http://localhost:5555', 'http://localhost:3000', 'http://localhost:4322'],
+    credentials: true
+}))
 app.use(express.json())
 app.use(router)
 

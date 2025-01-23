@@ -1,9 +1,5 @@
 import { PostgresErrorHandler } from "../../errors/handle_postgres_errors.js";
 import { query } from "../../utils/query.js";
-import { randomUUID } from "crypto";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
 
 export const get_xelosani = async (req, res, next) => {
   try {
@@ -12,62 +8,84 @@ export const get_xelosani = async (req, res, next) => {
                 SELECT  
                 x.firstname, 
                 x.lastname, 
-                x.email, 
+                CASE 
+                    WHEN (x.privacy ->> 'email') IS DISTINCT FROM 'დამალვა'
+                    THEN x.email
+                    ELSE NULL
+                END AS email,
+                CASE 
+                    WHEN (x.privacy ->> 'phone') IS DISTINCT FROM 'დამალვა'
+                    THEN x.phone
+                    ELSE NULL
+                END AS phone,
+                CASE 
+                    WHEN (x.privacy ->> 'date') IS DISTINCT FROM 'დამალვა'
+                    THEN x.date
+                    ELSE NULL
+                END AS date,
+                 (
+                  SELECT COALESCE(
+                    JSON_AGG(
+                      JSON_BUILD_OBJECT(
+                        'main_category', s.main_category,
+                        'main_title', s.main_title,
+                        'main_description', s.main_description,
+                        'main_price', s.main_price,
+                        'categories', s.categories,
+                        'publicId', s.public_id
+                      )
+                    ),
+                    '[]'
+                  )
+                  FROM services s
+                  WHERE s.xelosani_id = x.id
+                  LIMIT 8  -- if you need a limit
+                ) AS services,
+
+                (
+                  SELECT COALESCE(
+                    JSON_AGG(
+                      JSON_BUILD_OBJECT(
+                        'main', sk.main,
+                        'parent', sk.parent,
+                        'child', sk.child,
+                        'skills', sk.displayableskills
+                      )
+                    ),
+                    '[]'
+                  )
+                  FROM skill sk
+                  WHERE sk.xelosani_id = x.id
+                ) AS skillset,
                 x.gender, 
-                x.phone, 
                 x.created_at, 
                 x.privacy, 
                 x.about,
-                x.date,
                 x."stepPercent",
                 x.setup_done,
                 l.lat, 
                 l.lon,
-                se.main_category,
-                se.main_title,
-                CASE 
-                    WHEN sc.xelosani_id IS NOT NULL 
-                    THEN JSON_AGG(
-                        json_build_object(
-                            'schedule_id', sc.id,
-                            'xelosani_id', sc.xelosani_id,
-                            'available_from', to_char(sc.available_from, 'HH24:MI'),
-                            'available_to', to_char(sc.available_to, 'HH24:MI'),
-                            'day_of_week', sc.day_of_week
-                        )
-                    )
-                END AS schedules,     
-                skill.main,
-                skill.parent,
-                skill.child,
-                skill.displayableskills as skills
+                sc.schedule
                 FROM xelosani x
                 LEFT JOIN location_xelosani l ON l.id = x.id
-                LEFT JOIN services se ON se.xelosani_id = x.id
-                LEFT JOIN skill ON skill.xelosani_id = x.id
                 LEFT JOIN schedule sc ON sc.xelosani_id = x.id
                 WHERE x.prof_id = $1
                 GROUP BY 
-                    sc.xelosani_id,
+                    x.id,
                     x.firstname, 
                     x.lastname, 
-                    x.email, 
+                    email, 
+                    sc.schedule,
                     x.gender, 
-                    x.phone, 
+                    phone, 
                     x.created_at, 
                     x.privacy,
                     x.about,
-                    x.date,
+                    date,
                     x."stepPercent",
                     x.setup_done,
                     l.lat, 
-                    l.lon,
-                    se.main_category,
-                    se.main_title,
-                    skill.main,
-                    skill.parent,
-                    skill.child,
-                    skill.displayableskills;
+                    l.lon
             `;
     const data = await query(text, [profId]);
 
@@ -76,6 +94,97 @@ export const get_xelosani = async (req, res, next) => {
     console.log(error);
   }
 };
+
+export const get_xelosani_not_authorized = async (req, res, next) => {
+  try {
+    const { profId } = req.params;
+    const text = `
+                SELECT  
+                x.firstname, 
+                x.lastname, 
+                CASE 
+                    WHEN (x.privacy ->> 'email') IS DISTINCT FROM 'დამალვა'
+                    THEN x.email
+                    ELSE NULL
+                END AS email,
+                CASE 
+                    WHEN (x.privacy ->> 'phone') IS DISTINCT FROM 'დამალვა'
+                    THEN x.phone
+                    ELSE NULL
+                END AS phone,
+                CASE 
+                    WHEN (x.privacy ->> 'date') IS DISTINCT FROM 'დამალვა'
+                    THEN x.date
+                    ELSE NULL
+                END AS date,
+                (
+                  SELECT COALESCE(
+                    JSON_AGG(
+                      JSON_BUILD_OBJECT(
+                        'main_category', s.main_category,
+                        'main_title', s.main_title,
+                        'main_description', s.main_description,
+                        'main_price', s.main_price,
+                        'categories', s.categories,
+                        'publicId', s.public_id
+                      )
+                    ),
+                    '[]'
+                  )
+                  FROM services s
+                  WHERE s.xelosani_id = x.id
+                  LIMIT 8  -- if you need a limit
+                ) AS services,
+
+                (
+                  SELECT COALESCE(
+                    JSON_AGG(
+                      JSON_BUILD_OBJECT(
+                        'main', sk.main,
+                        'parent', sk.parent,
+                        'child', sk.child,
+                        'skills', sk.displayableskills
+                      )
+                    ),
+                    '[]'
+                  )
+                  FROM skill sk
+                  WHERE sk.xelosani_id = x.id
+                ) AS skillset,
+                x.gender, 
+                x.created_at, 
+                sc.schedule,  
+                x.about,
+                x.privacy,
+                l.lat,
+                l.lon,
+                sc.schedule 
+                FROM xelosani x
+                LEFT JOIN location_xelosani l ON l.id = x.id
+                LEFT JOIN schedule sc ON sc.xelosani_id = x.id
+                WHERE x.prof_id = $1
+                GROUP BY 
+                    x.id,
+                    sc.schedule,  
+                    x.firstname, 
+                    x.lastname, 
+                    email, 
+                    x.gender, 
+                    phone, 
+                    x.created_at, 
+                    x.about,
+                    date,
+                    x.privacy,
+                    l.lat, 
+                    l.lon
+            `;
+    const data = await query(text, [profId]);
+
+    res.status(200).json(data.rows[0]);
+  } catch (error) {
+    console.log(error)
+  }
+}
 
 export const check_xelosani_about = async (req, res, next) => {
   try {
@@ -102,9 +211,9 @@ export const get_xelosani_step_percent = async (req, res, next) => {
     const { profId } = req.params;
     const text = `
                 SELECT  
-                x."stepPercent",
-                x.setup_done
-                FROM xelosani x
+                "stepPercent",
+                setup_done
+                FROM xelosani
                 WHERE prof_id = $1
             `;
     const data = await query(text, [profId]);
@@ -119,6 +228,7 @@ export const handle_xelosani_about = async (req, res, next) => {
   try {
     const { profId } = req.params;
     const { about } = req.body;
+    console.log(about)
     const text = `
                 UPDATE xelosani
                 SET 
@@ -144,18 +254,15 @@ export const get_xelosani_step_data = async (req, res, next) => {
     const { profId } = req.params;
     const text = `
                 SELECT  
-                x.email, 
-                x.gender, 
-                x.phone,
-                x.about,
-                x.date,
-                l.id,
-                sk.id,
-                sc.id
+                CASE WHEN x.email IS NOT NULL THEN true ELSE false END AS email_exists,
+                CASE WHEN x.gender IS NOT NULL THEN true ELSE false END AS gender_exists,
+                CASE WHEN x.phone IS NOT NULL THEN true ELSE false END AS phone_exists,
+                CASE WHEN x.about IS NOT NULL THEN true ELSE false END AS about_exists,
+                CASE WHEN x.date IS NOT NULL THEN true ELSE false END AS date_exists,
+                CASE WHEN x.location_id IS NOT NULL THEN true ELSE false END AS location_exists,
+                CASE WHEN x.skills_id IS NOT NULL THEN true ELSE false END AS skills_exists,
+                CASE WHEN x.schedule_id IS NOT NULL THEN true ELSE false END AS schedule_exists
                 FROM xelosani x
-                JOIN location_xelosani l ON l.id = x.id
-                JOIN skill sk ON sk.xelosani_id = x.id
-                JOIN schedule sc ON sc.xelosani_id = x.id
                 WHERE x.prof_id = $1
             `;
     const data = await query(text, [profId]);
@@ -178,27 +285,6 @@ WHERE prof_id = $1;
             `;
     const data = await query(text, [profId]);
 
-    console.log("Contanct check data: ", data)
-    res.status(200).json(data.rows[0]);
-  } catch (error) {
-    console.log(error);
-  }
-};
-
-export const update_xelosani_contact = async (req, res, next) => {
-  try {
-    const { profId } = req.params;
-    const { phone } = req.body;
-    const text = `
-      UPDATE xelosani
-      SET 
-      phone = $2,
-      "stepPercent" = "stepPercent" + 12.5
-      WHERE prof_id = $1
-      RETURNING "stepPercent", prof_id
-    `;
-    const data = await query(text, [profId, phone]);
-
     res.status(200).json(data.rows[0]);
   } catch (error) {
     console.log(error);
@@ -209,6 +295,19 @@ export const update_xelosani_email = async (req, res, next) => {
   try {
     const { profId } = req.params;
     const { email } = req.body;
+    const checkText = `
+        SELECT id FROM damkveti 
+        WHERE email = $1
+        LIMIT 1
+    `;
+    const checkResult = await query(checkText, [email]);
+
+    if (checkResult.rowCount > 0) {
+      return res.status(400).json({
+          message: "მომხმარებელი მეილით უკვე არსებობს."
+      })
+    }
+
     const text = `
                 UPDATE xelosani
                 SET 
@@ -225,6 +324,7 @@ export const update_xelosani_email = async (req, res, next) => {
 
     res.status(200).json(data.rows[0]);
   } catch (error) {
+    console.log(error)
     const message = new PostgresErrorHandler(
       error.code,
       error.constraint,
@@ -238,6 +338,20 @@ export const update_xelosani_phone = async (req, res, next) => {
   try {
     const { profId } = req.params;
     const { phone } = req.body;
+
+    const checkText = `
+        SELECT id FROM damkveti 
+        WHERE phone = $1
+        LIMIT 1
+    `;
+    const checkResult = await query(checkText, [phone]);
+
+    if (checkResult.rowCount > 0) {
+      return res.status(400).json({
+          message: "მომხმარებელი მეილით უკვე არსებობს."
+      })
+    }
+
     const text = `
                 UPDATE xelosani
                 SET 
@@ -301,7 +415,6 @@ export const update_xelosani_age = async (req, res, next) => {
       throw new Error("hi");
     }
 
-    console.log(data);
     res.status(200).json(data.rows[0]);
   } catch (error) {
     console.log(error);
@@ -323,7 +436,7 @@ export const check_xelosani_gender = async (req, res, next) => {
     } else {
       res.status(400).json({ message: "გენდერი არ არის დამატებული." });
     }
-    } catch (error) {
+  } catch (error) {
     console.log(error);
   }
 };
@@ -346,7 +459,6 @@ export const update_xelosani_gender = async (req, res, next) => {
       throw new Error("hi");
     }
 
-    console.log(data);
     res.status(200).json(data.rows[0]);
   } catch (error) {
     console.log(error);
@@ -377,8 +489,13 @@ export const check_xelosani_skills = async (req, res, next) => {
 
 export const insert_xelosani_skills = async (req, res, next) => {
   try {
+    // Still Think about the relationship between xelosani do we want 
+    // two-way relationship or just one way. For now I think we should
+    // have two-way relationship we might filter out xelosani by skills later
+    // or just get skills that certain xelosani has so for now this looks alright.
     const { profId } = req.params;
     const { skills } = req.body;
+
     await query("BEGIN");
     const skill_data = await query(
       `
@@ -415,104 +532,54 @@ export const insert_xelosani_skills = async (req, res, next) => {
 
 export const check_xelosani_schedule = async (req, res, next) => {
   try {
-    const { profId } = req.params;
+    const { userId } = req.params;
     const text = `
-            SELECT  
-            FROM xelosani x
-            WHERE prof_id = $1 AND x.schedule_id IS NOT NULL
+            SELECT EXISTS(
+              SELECT 1
+              FROM schedule sc
+              WHERE sc.xelosani_id = $1
+            )
         `;
-    const data = await query(text, [profId]);
+    const data = await query(text, [userId]);
 
-    if (data.rowCount > 0) {
+    console.log(data)
+    if (data.rows[0].exists) {
       res.status(200).json({ message: "განრიგი დამატებულია." });
     } else {
       res.status(400).json({ message: "განრიგი არ არის დამატებული." });
     }
-    res.status(200).json({ schedule: data.rows[0] });
   } catch (error) {
     console.log(error);
   }
 };
 export const insert_xelosani_schedule = async (req, res, next) => {
-  const { profId } = req.params;
   const { schedule, xelosaniId } = req.body;
 
-  let tempFilePath;
-  const __filename = fileURLToPath(import.meta.url);
-  const uniqueId = randomUUID();
-  const __dirname = path.dirname(__filename);
-  await query("BEGIN");
   try {
-    tempFilePath = path.join(
-      __dirname + "/temporary_schedule_values_csv",
-      `schedule_${uniqueId}.csv`
-    );
+    const text = `
+        WITH inserted_schedule AS (
+          INSERT INTO schedule (xelosani_id, schedule) 
+          VALUES ($1, $2)
+        ),
+        updated_xelosani AS (
+          UPDATE xelosani
+          SET "stepPercent" = "stepPercent" + 12.5
+          WHERE id = $1
+          RETURNING "stepPercent"
+        )
+        SELECT "stepPercent" FROM updated_xelosani;
+    `;
 
-    const writeStream = fs.createWriteStream(tempFilePath);
+    const { rows } = await query(text, [xelosaniId, JSON.stringify(schedule)]);
 
-    schedule.forEach(({ startTime, endTime, day }) => {
-      writeStream.write(`${xelosaniId},${startTime},${endTime},${day}\n`);
-    });
-
-    writeStream.end();
-
-    writeStream.on("finish", async () => {
-      try {
-        await query(
-          `COPY schedule (xelosani_id, available_from, available_to, day_of_week) FROM '${tempFilePath}' DELIMITER ',' CSV;`
-        );
-        const data = await query(
-          `
-                    UPDATE xelosani
-SET 
-    "stepPercent" = "stepPercent" + 12.5,
-    schedule_id = sc.id
-FROM schedule sc
-WHERE sc.xelosani_id = xelosani.id
-AND prof_id = $1
-RETURNING "stepPercent", prof_id;
-
-                `,
-          [profId]
-        );
-        await query("COMMIT;");
-        console.log(data)
-        res.status(200).json(data.rows[0]);
-      } catch (error) {
-        console.error("Error inserting schedules:", error);
-      } finally {
-        fs.unlink(tempFilePath, (err) => {
-          if (err) {
-            console.error("Error deleting temporary file:", err);
-          } else {
-            console.log("Temporary file deleted successfully.");
-          }
-        });
-      }
-    });
-  } catch (err) {
-    console.log(err);
-  }
-};
-
-export const insert_xelosani_service = async (req, res, next) => {
-  try {
-    const { profId } = req.params;
-    const { skills } = req.body;
-    const id = xelosani_update.rows[0].id;
-    await query(
-      `
-                INSERT INTO skill (
-                main_category, public_id, tags, categories, main_title, main_description, xelosani_id
-                )
-                VALUES ((SELECT id FROM xelosani WHERE prof_id = $1))
-            `,
-      [profId]
-    );
-
-    res.status(200).json(xelosani_update.rows[0]);
+    if (rows.length > 0) {
+      console.log(rows[0])
+      res.status(200).json(rows[0])
+    } else {
+      throw new Error('Failed to insert schedule or fetch stepPercent.');
+    }
   } catch (error) {
-    console.log(error);
+    console.log(error)
   }
 };
 
@@ -537,22 +604,139 @@ export const insert_xelosani_location = async (req, res, next) => {
   }
 };
 
-export const check_xelosani_location = async (req, res, next) => {
+export const modify_xelosani_age = async (req, res, next) => {
   try {
     const { profId } = req.params;
+    const { date } = req.body;
+
     const text = `
-                SELECT  
-                FROM xelosani x
-                WHERE prof_id = $1 AND x.location_id IS NOT NULL  
-            `;
-    const data = await query(text, [profId]);
+      UPDATE xelosani
+      SET date = $1
+      WHERE prof_id = $2
+    `;
+    const data = await query(text, [new Date(date), profId]);
+
     if (data.rowCount > 0) {
-      res.status(200).json({ message: "ლოკაცია დამატებულია." });
+      return res.status(200).json({ message: "ასაკი წარმატებით განახლდა." });
     } else {
-      res.status(400).json({ message: "ლოკაცია არ არის დამატებული." });
+      return res
+        .status(400)
+        .json({ message: "ასაკის განახლება ვერ მოხერხდა, სცადეთ თავიდან." });
     }
-    res.status(200).json(data.rows[0]);
   } catch (error) {
     console.log(error);
   }
 };
+
+export const modify_xelosani_schedule = async (req, res, next) => {
+  const { schedule, xelosaniId } = req.body;
+
+  try {
+    const text = `
+        UPDATE schedule
+        SET 
+        schedule = $2
+        WHERE xelosani_id = $1
+    `;
+
+    const data = await query(text, [xelosaniId, JSON.stringify(schedule)]);
+
+    if (data.rowCount > 0) {
+      res.status(200).json("განრიგი წარმატებით შეიცვალა.")
+    } else {
+      throw new Error('დაფიქსირდა შეცდომა განრიგის შეცვლისას.');
+    }
+  } catch (error) {
+    console.log(error)
+  }
+};
+
+export const modify_xelosani_skills = async (req, res, next) => {
+  try {
+    const { skills, userId } = req.body;
+
+    const text = `
+      UPDATE skill
+      SET 
+      main = $2,
+      child = $3,
+      parent = $4,
+      displayableskills = $5
+      WHERE xelosani_id = $1
+    `;
+    const data = await query(text, [
+      userId,
+      skills.main,
+      skills.child,
+      skills.parent,
+      JSON.stringify(skills.displayableSkills),
+    ]);
+
+    if (data.rowCount > 0) {
+      return res.status(200).json({ message: "ასაკი წარმატებით განახლდა." });
+    } else {
+      return res
+        .status(400)
+        .json({ message: "ასაკის განახლება ვერ მოხერხდა, სცადეთ თავიდან." });
+    }
+  } catch (error) {
+    console.log(error);
+  }
+};
+
+export const modify_xelosani_about = async (req, res, next) => {
+  try {
+    const { about, userId } = req.body;
+
+    const text = `
+      UPDATE xelosani
+      SET 
+      about = $1
+      WHERE id = $2
+    `;
+    const data = await query(text, [about, userId]);
+
+    if (data.rowCount > 0) {
+      return res.status(200).json({ message: "ასაკი წარმატებით განახლდა." });
+    } else {
+      return res
+        .status(400)
+        .json({ message: "ასაკის განახლება ვერ მოხერხდა, სცადეთ თავიდან." });
+    }
+  } catch (error) {
+    console.log(error);
+  }
+};
+
+export const increment_xelosani_step_percent = async (req, res, next) => {
+  try {
+    const {profId} = req.params 
+    const {amount} = req.body
+
+    const text = `
+      UPDATE xelosani
+      SET "stepPercent" = "stepPercent" + $1
+      WHERE prof_id = $2
+      RETURNING "stepPercent"
+    `
+    const data = await query(text, [amount, profId])
+    res.status(200).send(data.rows[0])
+  } catch (error) {
+    console.log(error)
+  }
+}
+
+export const mark_user_as_setup_done = async (req, res, next) => {
+  try {
+    const {profId} = req.params
+    const text = `
+      UPDATE xelosani
+      SET setup_done = true
+      WHERE prof_id = $1
+    `
+    await query(text, [profId])
+    res.status(200).send("success")
+  } catch (error) {
+    console.log(error)
+  }
+}
