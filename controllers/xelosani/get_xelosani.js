@@ -23,6 +23,11 @@ export const get_xelosani = async (req, res, next) => {
                     THEN x.date
                     ELSE NULL
                 END AS date,
+                CASE 
+                    WHEN (x.privacy ->> 'location') IS DISTINCT FROM 'დამალვა'
+                    THEN ul.place_name_ka
+                    ELSE NULL
+                END AS place_name_ka,
                  (
                   SELECT COALESCE(
                     JSON_AGG(
@@ -38,12 +43,12 @@ export const get_xelosani = async (req, res, next) => {
                     '[]'
                   )
                   FROM services s
+                  LEFT JOIN service_location sl on s.id = sl.service_id
                   WHERE s.xelosani_id = x.id
-                  LIMIT 8  -- if you need a limit
+                  LIMIT 8
                 ) AS services,
 
-                (
-                  SELECT COALESCE(
+                COALESCE(
                     JSON_AGG(
                       JSON_BUILD_OBJECT(
                         'main', sk.main,
@@ -53,39 +58,35 @@ export const get_xelosani = async (req, res, next) => {
                       )
                     ),
                     '[]'
-                  )
-                  FROM skill sk
-                  WHERE sk.xelosani_id = x.id
-                ) AS skillset,
+                  ) as skillset,
                 x.gender, 
                 x.created_at, 
                 x.privacy, 
                 x.about,
                 x."stepPercent",
                 x.setup_done,
-                l.lat, 
-                l.lon,
                 sc.schedule
-                FROM xelosani x
-                LEFT JOIN location_xelosani l ON l.id = x.id
+                FROM users x
                 LEFT JOIN schedule sc ON sc.xelosani_id = x.id
-                WHERE x.prof_id = $1
+                LEFT JOIN user_location ul ON ul.user_id = x.id
+                LEFT JOIN skill sk ON sk.xelosani_id = x.id
+                WHERE x.prof_id = $1 AND x.role = 'xelosani'
                 GROUP BY 
-                    x.id,
-                    x.firstname, 
-                    x.lastname, 
-                    email, 
-                    sc.schedule,
-                    x.gender, 
-                    phone, 
-                    x.created_at, 
-                    x.privacy,
-                    x.about,
-                    date,
-                    x."stepPercent",
-                    x.setup_done,
-                    l.lat, 
-                    l.lon
+                  x.id,
+                  x.firstname, 
+                  ul.place_name_ka,
+                  x.location_id,
+                  x.lastname, 
+                  email, 
+                  sc.schedule,
+                  x.gender, 
+                  phone, 
+                  x.created_at, 
+                  x.privacy,
+                  x.about,
+                  date,
+                  x."stepPercent",
+                  x.setup_done
             `;
     const data = await query(text, [profId]);
 
@@ -96,6 +97,10 @@ export const get_xelosani = async (req, res, next) => {
 };
 
 export const get_xelosani_not_authorized = async (req, res, next) => {
+  /*
+    We could get current user lat/lng and just tell them if the user
+    is close to the service location or not :) 
+  */
   try {
     const { profId } = req.params;
     const text = `
@@ -117,7 +122,12 @@ export const get_xelosani_not_authorized = async (req, res, next) => {
                     THEN x.date
                     ELSE NULL
                 END AS date,
-                (
+                CASE 
+                    WHEN (x.privacy ->> 'location') IS DISTINCT FROM 'დამალვა'
+                    THEN ul.place_name_ka
+                    ELSE NULL
+                END AS place_name_ka,
+                 (
                   SELECT COALESCE(
                     JSON_AGG(
                       JSON_BUILD_OBJECT(
@@ -132,12 +142,12 @@ export const get_xelosani_not_authorized = async (req, res, next) => {
                     '[]'
                   )
                   FROM services s
+                  LEFT JOIN service_location sl on s.id = sl.service_id
                   WHERE s.xelosani_id = x.id
-                  LIMIT 8  -- if you need a limit
+                  LIMIT 8
                 ) AS services,
 
-                (
-                  SELECT COALESCE(
+                COALESCE(
                     JSON_AGG(
                       JSON_BUILD_OBJECT(
                         'main', sk.main,
@@ -147,36 +157,31 @@ export const get_xelosani_not_authorized = async (req, res, next) => {
                       )
                     ),
                     '[]'
-                  )
-                  FROM skill sk
-                  WHERE sk.xelosani_id = x.id
-                ) AS skillset,
+                  ) as skillset,
                 x.gender, 
                 x.created_at, 
-                sc.schedule,  
-                x.about,
                 x.privacy,
-                l.lat,
-                l.lon,
-                sc.schedule 
-                FROM xelosani x
-                LEFT JOIN location_xelosani l ON l.id = x.id
+                x.about,
+                sc.schedule
+                FROM users x
                 LEFT JOIN schedule sc ON sc.xelosani_id = x.id
-                WHERE x.prof_id = $1
+                LEFT JOIN user_location ul ON ul.user_id = x.id
+                LEFT JOIN skill sk ON sk.xelosani_id = x.id
+                WHERE x.prof_id = $1 AND x.role = 'xelosani'
                 GROUP BY 
-                    x.id,
-                    sc.schedule,  
-                    x.firstname, 
-                    x.lastname, 
-                    email, 
-                    x.gender, 
-                    phone, 
-                    x.created_at, 
-                    x.about,
-                    date,
-                    x.privacy,
-                    l.lat, 
-                    l.lon
+                  x.id,
+                  x.firstname, 
+                  ul.place_name_ka,
+                  x.location_id,
+                  x.lastname, 
+                  email, 
+                  sc.schedule,
+                  x.gender, 
+                  phone, 
+                  x.created_at, 
+                  x.about,
+                  date,
+                  x.privacy
             `;
     const data = await query(text, [profId]);
 
@@ -191,8 +196,8 @@ export const check_xelosani_about = async (req, res, next) => {
     const { profId } = req.params;
     const text = `
                 SELECT  
-                FROM xelosani x
-                WHERE prof_id = $1 AND x.about IS NOT NULL
+                FROM users x
+                WHERE x.role = 'xelosani' AND prof_id = $1 AND x.about IS NOT NULL
             `;
     const data = await query(text, [profId]);
 
@@ -213,8 +218,8 @@ export const get_xelosani_step_percent = async (req, res, next) => {
                 SELECT  
                 "stepPercent",
                 setup_done
-                FROM xelosani
-                WHERE prof_id = $1
+                FROM users x
+                WHERE x.role = 'xelosani' AND prof_id = $1
             `;
     const data = await query(text, [profId]);
 
@@ -230,11 +235,11 @@ export const handle_xelosani_about = async (req, res, next) => {
     const { about } = req.body;
     console.log(about)
     const text = `
-                UPDATE xelosani
+                UPDATE users x
                 SET 
                 about = $2,
                 "stepPercent" = "stepPercent" + 12.5
-                WHERE prof_id = $1
+                WHERE x.role = 'xelosani' AND prof_id = $1
                 RETURNING "stepPercent", prof_id
             `;
     const data = await query(text, [profId, about]);
@@ -251,7 +256,7 @@ export const handle_xelosani_about = async (req, res, next) => {
 
 export const get_xelosani_step_data = async (req, res, next) => {
   try {
-    const { profId } = req.params;
+    const { userId } = req.params;
     const text = `
                 SELECT  
                 CASE WHEN x.email IS NOT NULL THEN true ELSE false END AS email_exists,
@@ -260,12 +265,13 @@ export const get_xelosani_step_data = async (req, res, next) => {
                 CASE WHEN x.about IS NOT NULL THEN true ELSE false END AS about_exists,
                 CASE WHEN x.date IS NOT NULL THEN true ELSE false END AS date_exists,
                 CASE WHEN x.location_id IS NOT NULL THEN true ELSE false END AS location_exists,
-                CASE WHEN x.skills_id IS NOT NULL THEN true ELSE false END AS skills_exists,
-                CASE WHEN x.schedule_id IS NOT NULL THEN true ELSE false END AS schedule_exists
-                FROM xelosani x
-                WHERE x.prof_id = $1
+                CASE WHEN uxs.skills_id IS NOT NULL THEN true ELSE false END AS skills_exists,
+                CASE WHEN uxs.schedule_id IS NOT NULL THEN true ELSE false END AS schedule_exists
+                FROM users x
+                LEFT JOIN users_xelosani_specific uxs ON uxs.user_id = x.id 
+                WHERE x.role = 'xelosani' AND x.id = $1
             `;
-    const data = await query(text, [profId]);
+    const data = await query(text, [userId]);
 
     res.status(200).json(data.rows[0]);
   } catch (error) {
@@ -280,8 +286,8 @@ export const check_xelosani_contact = async (req, res, next) => {
                 SELECT  
     CASE WHEN x.email IS NOT NULL THEN true ELSE false END AS email_exists,
     CASE WHEN x.phone IS NOT NULL THEN true ELSE false END AS phone_exists
-FROM xelosani x
-WHERE prof_id = $1;
+FROM users x
+WHERE x.role = 'xelosani' AND prof_id = $1;
             `;
     const data = await query(text, [profId]);
 
@@ -291,6 +297,9 @@ WHERE prof_id = $1;
   }
 };
 
+/*
+  I don't think allowing users to update email is a good idea!
+*/
 export const update_xelosani_email = async (req, res, next) => {
   try {
     const { profId } = req.params;
@@ -334,38 +343,45 @@ export const update_xelosani_email = async (req, res, next) => {
   }
 };
 
+/*
+  I don't think this is a good idea eiher
+*/
+
 export const update_xelosani_phone = async (req, res, next) => {
   try {
-    const { profId } = req.params;
-    const { phone } = req.body;
+    const { phone, userId } = req.body;
 
-    const checkText = `
-        SELECT id FROM damkveti 
-        WHERE phone = $1
-        LIMIT 1
-    `;
-    const checkResult = await query(checkText, [phone]);
+    await query('BEGIN');
+        const check_uniqueness = `
+            UPDATE unique_users 
+              SET phone = $1
+            WHERE user_id = $2 
+        `;
 
-    if (checkResult.rowCount > 0) {
-      return res.status(400).json({
-          message: "მომხმარებელი მეილით უკვე არსებობს."
-      })
-    }
+        const checkResult = await query(check_uniqueness, [phone, userId]);
+
+        if (checkResult.rowCount === 0) {
+          return res.status(400).json({
+              field: "phoneEmail",
+              message: "მომხმარებელი მობილურის ნომრით უკვე არსებობს."
+          })
+        }
 
     const text = `
-                UPDATE xelosani
+                UPDATE users
                 SET 
-                phone = $2,
-                "stepPercent" = "stepPercent" + 12.5                
-                WHERE prof_id = $1
-                RETURNING "stepPercent", prof_id
+                  phone = $2,
+                  "stepPercent" = "stepPercent" + 12.5  
+                WHERE role = 'xelosani' AND id = $1
+                RETURNING "stepPercent"
             `;
-    const data = await query(text, [profId, phone]);
+    const data = await query(text, [userId, phone]);
 
     if (!data.rowCount) {
       throw new Error("hi");
     }
 
+    await query('COMMIT');
     res.status(200).json(data.rows[0]);
   } catch (error) {
     const message = new PostgresErrorHandler(
@@ -382,8 +398,8 @@ export const check_xelosani_age = async (req, res, next) => {
     const { profId } = req.params;
     const text = `
             SELECT  
-            FROM xelosani x
-            WHERE prof_id = $1 AND x.date IS NOT NULL
+            FROM users x
+            WHERE x.role = 'xelosani' AND prof_id = $1 AND x.date IS NOT NULL
         `;
     const data = await query(text, [profId]);
 
@@ -402,11 +418,11 @@ export const update_xelosani_age = async (req, res, next) => {
     const { profId } = req.params;
     const { date } = req.body;
     const text = `
-                UPDATE xelosani
+                UPDATE users x
                 SET 
                 date = $2,
                 "stepPercent" = "stepPercent" + 12.5                
-                WHERE prof_id = $1
+                WHERE x.role = 'xelosani' AND prof_id = $1
                 RETURNING "stepPercent", prof_id
             `;
     const data = await query(text, [profId, date]);
@@ -426,8 +442,8 @@ export const check_xelosani_gender = async (req, res, next) => {
     const { profId } = req.params;
     const text = `
             SELECT
-            FROM xelosani x
-            WHERE prof_id = $1 AND x.gender IS NOT NULL
+            FROM users x
+            WHERE x.role = 'xelosani' AND prof_id = $1 AND x.gender IS NOT NULL
         `;
     const data = await query(text, [profId]);
 
@@ -446,11 +462,11 @@ export const update_xelosani_gender = async (req, res, next) => {
     const { profId } = req.params;
     const { gender } = req.body;
     const text = `
-                UPDATE xelosani
+                UPDATE users x
                 SET 
                 gender = $2,
                 "stepPercent" = "stepPercent" + 12.5                
-                WHERE prof_id = $1
+                WHERE x.role = 'xelosani' AND prof_id = $1
                 RETURNING "stepPercent", prof_id
             `;
     const data = await query(text, [profId, gender]);
@@ -467,14 +483,16 @@ export const update_xelosani_gender = async (req, res, next) => {
 
 export const check_xelosani_skills = async (req, res, next) => {
   try {
-    const { profId } = req.params;
+    const {userId} = req.params
     const text = `
             SELECT  
-            FROM xelosani x
-            WHERE prof_id = $1 AND skills_id IS NOT NULL
+            1
+            FROM users_xelosani_specific x
+            WHERE user_id = $1 AND skills_id IS NOT NULL
         `;
-    const data = await query(text, [profId]);
+    const data = await query(text, [userId]);
 
+    
     if (data.rowCount > 0) {
       res.status(200).json({ message: "სქილები დამატებულია." });
     } else if (data.rowCount === 0) {
@@ -493,18 +511,17 @@ export const insert_xelosani_skills = async (req, res, next) => {
     // two-way relationship or just one way. For now I think we should
     // have two-way relationship we might filter out xelosani by skills later
     // or just get skills that certain xelosani has so for now this looks alright.
-    const { profId } = req.params;
-    const { skills } = req.body;
+    const { skills, userId } = req.body;
 
     await query("BEGIN");
     const skill_data = await query(
       `
                 INSERT INTO skill (xelosani_id, displayableSkills, main, parent, child)
-                    VALUES ((SELECT id FROM xelosani WHERE prof_id = $1), $2::jsonb, $3, $4, $5)
-                    RETURNING id
+                    VALUES ($1, $2::jsonb, $3, $4, $5)
+                    RETURNING id, xelosani_id
                     `,
       [
-        profId,
+        userId,
         JSON.stringify(skills.displayableSkills),
         skills.main,
         skills.parent,
@@ -513,15 +530,23 @@ export const insert_xelosani_skills = async (req, res, next) => {
     );
     const xelosani_update = await query(
       `
-                UPDATE xelosani
+                UPDATE users
                 SET 
-                    "stepPercent" = "stepPercent" + 12.5,
-                    skills_id = $2               
-                WHERE prof_id = $1
+                    "stepPercent" = "stepPercent" + 12.5
+                WHERE role = 'xelosani' AND id = $1
                 RETURNING "stepPercent", prof_id;
             `,
-      [profId, skill_data.rows[0].id]
+      [userId]
     );
+
+    //add_skill_id_to_specific_xelosani
+    await query(
+      `
+        UPDATE users_xelosani_specific
+        SET 
+          skills_id = $2      
+        WHERE user_id = $1
+      `, [userId, skill_data.rows[0].id])
     await query("COMMIT");
 
     res.status(200).json(xelosani_update.rows[0]);
@@ -560,12 +585,19 @@ export const insert_xelosani_schedule = async (req, res, next) => {
         WITH inserted_schedule AS (
           INSERT INTO schedule (xelosani_id, schedule) 
           VALUES ($1, $2)
+          RETURNING id
         ),
         updated_xelosani AS (
-          UPDATE xelosani
+          UPDATE users
           SET "stepPercent" = "stepPercent" + 12.5
-          WHERE id = $1
+          WHERE role = 'xelosani' AND id = $1
           RETURNING "stepPercent"
+        ),
+        updated_users_xelosani_specific AS (
+          UPDATE users_xelosani_specific
+          SET 
+            schedule_id = (SELECT id FROM inserted_schedule)
+            WHERE user_id = $1
         )
         SELECT "stepPercent" FROM updated_xelosani;
     `;
@@ -593,7 +625,7 @@ export const insert_xelosani_location = async (req, res, next) => {
                 INSERT INTO location_xelosani (
                   main_category, public_id, tags, categories, main_title, main_description, xelosani_id
                 )
-                VALUES ((SELECT id FROM xelosani WHERE prof_id = $1))
+                VALUES ((SELECT id FROM users WHERE role = 'xelosani' AND prof_id = $1))
             `,
       [profId]
     );
@@ -610,9 +642,9 @@ export const modify_xelosani_age = async (req, res, next) => {
     const { date } = req.body;
 
     const text = `
-      UPDATE xelosani
+      UPDATE users
       SET date = $1
-      WHERE prof_id = $2
+      WHERE role = 'xelosani' AND prof_id = $2
     `;
     const data = await query(text, [new Date(date), profId]);
 
@@ -689,10 +721,10 @@ export const modify_xelosani_about = async (req, res, next) => {
     const { about, userId } = req.body;
 
     const text = `
-      UPDATE xelosani
+      UPDATE users
       SET 
       about = $1
-      WHERE id = $2
+      WHERE role = 'xelosani' AND id = $2
     `;
     const data = await query(text, [about, userId]);
 
@@ -711,15 +743,14 @@ export const modify_xelosani_about = async (req, res, next) => {
 export const increment_xelosani_step_percent = async (req, res, next) => {
   try {
     const {profId} = req.params 
-    const {amount} = req.body
 
     const text = `
-      UPDATE xelosani
-      SET "stepPercent" = "stepPercent" + $1
-      WHERE prof_id = $2
+      UPDATE users
+        SET "stepPercent" = "stepPercent" + 12.5
+        WHERE role = 'xelosani' AND prof_id = $1
       RETURNING "stepPercent"
     `
-    const data = await query(text, [amount, profId])
+    const data = await query(text, [profId])
     res.status(200).send(data.rows[0])
   } catch (error) {
     console.log(error)
@@ -730,9 +761,9 @@ export const mark_user_as_setup_done = async (req, res, next) => {
   try {
     const {profId} = req.params
     const text = `
-      UPDATE xelosani
+      UPDATE users
       SET setup_done = true
-      WHERE prof_id = $1
+      WHERE role = 'xelosani' AND prof_id = $1
     `
     await query(text, [profId])
     res.status(200).send("success")

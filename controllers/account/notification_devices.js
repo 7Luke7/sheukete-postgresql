@@ -11,12 +11,12 @@ export const update_notification_devices = async (req, res, next) => {
                 THEN ARRAY_REMOVE(notificationdevices, $1)
                 ELSE ARRAY_APPEND(notificationdevices, $1)
             END AS updatedDevices
-            FROM xelosani
-            WHERE id = $2
+            FROM users
+            WHERE role = 'xelosani' AND id = $2
             )
-            UPDATE xelosani
+            UPDATE users
             SET notificationdevices = (SELECT updatedDevices FROM notif_target_check)
-            WHERE id = $2;
+            WHERE role = 'xelosani' AND id = $2;
         `
         const data = await query(text, [target, userId])
 
@@ -33,8 +33,8 @@ export const get_targeted_notification_devices = async (req, res, next) => {
         console.log(userId)
         const text = `
             SELECT notificationdevices
-                FROM xelosani
-                WHERE id = $1
+                FROM users
+                WHERE role = 'xelosani' AND id = $1
         `
         const data = await query(text, [userId])
 

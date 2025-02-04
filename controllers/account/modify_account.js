@@ -5,11 +5,11 @@ export const modify_sensitive_xelosani_fields = async (req, res, next) => {
         const {userId, firstname, lastname, email, phone} = req.body
         if (!email && !phone) {
             const text = `
-            UPDATE xelosani
+            UPDATE users
                 SET 
                     firstname = COALESCE($1, firstname),
                     lastname = COALESCE($2, lastname)
-                WHERE id = $3
+                WHERE role = 'xelosani' AND id = $3
             ` 
             await query(text, [firstname, lastname, userId])
             return res.status(200).json({
@@ -17,6 +17,7 @@ export const modify_sensitive_xelosani_fields = async (req, res, next) => {
             })
         } 
 
+        // take a look at this later
         if (email && !phone) {
             const checkText = `
                 SELECT id FROM damkveti 

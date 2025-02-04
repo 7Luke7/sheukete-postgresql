@@ -4,8 +4,8 @@ export const get_xelosani_privacy = async (req, res, next) => {
     try {
         const {userId} = req.body
         const text = `
-            SELECT privacy FROM xelosani
-                WHERE id = $1
+            SELECT privacy FROM users
+                WHERE role = 'xelosani' AND id = $1
         `
         const data = await query(text, [userId])
 
@@ -19,12 +19,13 @@ export const get_xelosani_privacy = async (req, res, next) => {
 export const update_xelosani_privacy = async (req, res, next) => {
     try {
         const {field, value, userId} = req.body
+        console.log(field, value, userId)
         const text = `
-            UPDATE xelosani 
+            UPDATE users 
                 SET privacy = jsonb_set(privacy, $1::text[], $2::jsonb)
-                WHERE id = $3
+                WHERE role = 'xelosani' AND id = $3
         `
-        const data = await query(text, [[field], JSON.stringify(value), userId])
+        await query(text, [[field], JSON.stringify(value), userId])
 
         res.status(200).send("success")
     } catch (error) {
