@@ -2,14 +2,13 @@ import { query } from "../../utils/query.js"
 
 export const get_account = async (req, res, next) => {
     try {
-        const {userId} = req.body
-        console.log(userId)
+        const {userId, role} = req.body
         const text = `
             SELECT firstname, lastname, email, phone
                 FROM users
-                WHERE role = 'xelosani' AND id = $1
+                WHERE role = $2 AND id = $1
             ` 
-        const data = await query(text, [userId])
+        const data = await query(text, [userId, role])
 
         console.log(data.rows)
         res.status(200).json(data.rows[0])

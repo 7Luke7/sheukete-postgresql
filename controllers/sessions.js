@@ -1,5 +1,3 @@
-import { memcached_server_request } from "../utils/memcached_server_request.js"
-
 export const verify_user = async (request) => {
     try {
         const session = request.headers.cookie.split("sessionId=")[1]
@@ -7,16 +5,7 @@ export const verify_user = async (request) => {
             throw new Error(401)
         }
 
-        const user = await memcached_server_request(
-            "POST",
-            "user_session",
-            {
-                body: JSON.stringify({session}),
-                headers: {
-                    "Content-Type": "application/json"
-                }
-            }
-        )
+        
 
         if (!user) {
             throw new Error(401)

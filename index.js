@@ -2,7 +2,9 @@ import express from "express"
 import pg from "pg"
 import router from "./routers/user-route.js"
 import cors from "cors"
+import {config} from "dotenv"
 
+config()
 const { Pool } = pg
 const port = 4321
 const app = express()
@@ -16,7 +18,7 @@ export const pool = new Pool({
 })
 
 app.use(cors({
-    origin: ['http://localhost:5555', 'http://localhost:3000', 'http://localhost:4322'],
+    origin: ['http://localhost:5555', 'http://localhost:3000'],
     credentials: true
 }))
 app.use(express.json())

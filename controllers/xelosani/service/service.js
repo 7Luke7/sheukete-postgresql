@@ -78,12 +78,11 @@ export const get_xelosani_services_profile_page = async (req, res, next) => {
       SELECT * FROM services
       LEFT JOIN service_location on id = service_location.service_id
       WHERE xelosani_id = $1
-      LIMIT 8
+      LIMIT 4
     `
 
     const data = await query(text, [req.params.id])
 
-    console.log(data)
     if (data.rowCount > 0) {
       res.status(200).json(data.rows[0])
     } else if (data.rowCount === 0){
@@ -99,7 +98,7 @@ export const get_xelosani_services_profile_page = async (req, res, next) => {
 }
 
 export const get_xelosani_service = async (req, res, next) => {
-  const {service_public_id} = req.body
+  const {service_public_id} = req.params
   try {
     const text = `
       SELECT
@@ -114,8 +113,21 @@ export const get_xelosani_service = async (req, res, next) => {
        child_services,
        place_name_ka,
        longitude,
-       latitude
+       latitude,
+       u.role,
+       s.created_at AS "service_created_at",
+       s.completed_count AS "service_completed_count",
+       s.ratings,
+       u.prof_id,
+       u.firstname,
+       sl.city,
+       s.public_id,
+       uxs.avgrating AS "user_avg_rating",
+       uxs.jobs_completed AS "user_jobs_completed_count",
+       u.lastname
       FROM services s
+      INNER JOIN users u ON u.role = 'xelosani' AND u.id = s.xelosani_id
+      INNER JOIN users_xelosani_specific uxs ON uxs.user_id = s.xelosani_id
       LEFT JOIN service_location sl ON sl.service_id = s.id 
       WHERE s.public_id = $1
     `
@@ -183,8 +195,8 @@ export const update_service = async (req, res, next) => {
 
       const location_data = await query(locaiton_query, [
         data.rows[0].id,
-        location.longitude,
-        location.latitude,
+        location[0],
+        location[1],
         location.bbox,
         location.center,
         location.city,
@@ -208,6 +220,34 @@ export const update_service = async (req, res, next) => {
   }
   } catch (error) {
     await query("ROLLBACK")
+    console.log(error)
+  }
+}
+
+export const get_all_user_service = async (req, res, next) => {
+  try {
+    const {cursor, prof_id} = req.query
+
+    console.log(cursor, prof_id)
+    const text = `
+      SELECT * FROM services s
+      INNER JOIN users u ON u.prof_id = $1 AND u.role = 'xelosani'
+      WHERE s.xelosani_id = u.id
+      ORDER BY s.created_at DESC
+    `
+
+    const data = await query(text, [prof_id])
+
+    if (data.rowCount > 0) {
+      res.status(200).json({services: data.rows})
+    } else if (data.rowCount === 0){
+      res.status(400).json({
+        message: "სერვისების ჩატვირთვა ვერ მოხერხდა."
+      })
+    } else {
+      throw new Error("დაფიქსირდა პრობლემა");
+    }
+  } catch (error) {
     console.log(error)
   }
 }

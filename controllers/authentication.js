@@ -38,11 +38,13 @@ export const register = async (req, res, next) => {
         const values = [firstname, lastname, password, role, email || null, phone, checkResult.rows[0].user_id, [notification_devices]];
         const data = await query(text, values);
 
-        const text1 = `
-            INSERT INTO users_xelosani_specific (user_id, role)
-            VALUES($1, $2)
-        `
-        await query(text1, [checkResult.rows[0].user_id, role]);
+        if (role === "xelosani") {
+            const text1 = `
+                INSERT INTO users_xelosani_specific (user_id, role)
+                VALUES($1, $2)
+            `
+            await query(text1, [checkResult.rows[0].user_id, role]);
+        }
 
         await query('COMMIT');
         res.status(200).json({

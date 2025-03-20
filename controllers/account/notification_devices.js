@@ -2,8 +2,7 @@ import { query } from "../../utils/query.js"
 
 export const update_notification_devices = async (req, res, next) => {
     try {
-        const {userId, target} = req.body
-        console.log(userId, target)
+        const {userId, target, role} = req.body
         const text = `
             WITH notif_target_check AS (
                 SELECT CASE 
@@ -12,13 +11,13 @@ export const update_notification_devices = async (req, res, next) => {
                 ELSE ARRAY_APPEND(notificationdevices, $1)
             END AS updatedDevices
             FROM users
-            WHERE role = 'xelosani' AND id = $2
+            WHERE role = $3 AND id = $2
             )
             UPDATE users
             SET notificationdevices = (SELECT updatedDevices FROM notif_target_check)
-            WHERE role = 'xelosani' AND id = $2;
+            WHERE role = $3 AND id = $2;
         `
-        const data = await query(text, [target, userId])
+        const data = await query(text, [target, userId, role])
 
         console.log(data)
         res.status(200).json({message: "hi"})
@@ -29,14 +28,13 @@ export const update_notification_devices = async (req, res, next) => {
 
 export const get_targeted_notification_devices = async (req, res, next) => {
     try {
-        const {userId} = req.body
-        console.log(userId)
+        const {userId, role} = req.body
         const text = `
             SELECT notificationdevices
                 FROM users
-                WHERE role = 'xelosani' AND id = $1
+                WHERE role = $2 AND id = $1
         `
-        const data = await query(text, [userId])
+        const data = await query(text, [userId, role])
 
         console.log(data.rows[0])
         res.status(200).json(data.rows[0])

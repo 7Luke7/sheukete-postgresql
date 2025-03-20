@@ -1,18 +1,18 @@
 import { query } from "../../utils/query.js";
 
-export const check_xelosani_location = async (req, res, next) => {
+export const check_user_location = async (req, res, next) => {
   try {
-    const { userId } = req.params;
+    const { userId, role } = req.params;
 
     const text = `
         SELECT EXISTS(
             SELECT 1
             FROM user_location
-            WHERE user_id = $1 AND user_role = 'xelosani'
+            WHERE user_id = $1 AND user_role = $2
         ) AS exists
     `;
 
-    const data = await query(text, [userId]);
+    const data = await query(text, [userId, role]);
     if (!data.rows[0].exists) {
       res.status(400).json({
         error: "ლოკაცია და განრიგი არ არსებობს",
@@ -25,9 +25,9 @@ export const check_xelosani_location = async (req, res, next) => {
   }
 };
 
-export const create_xelosani_location = async (req, res, next) => {
+export const create_user_location = async (req, res, next) => {
   try {
-    const userId = req.params.userId;
+    const {userId, role} = req.params;
     const location = req.body.location;
 
     await query("BEGIN");
@@ -48,7 +48,7 @@ export const create_xelosani_location = async (req, res, next) => {
 
     const location_data = await query(locaiton_query, [
       userId, // $1: user_id
-      "xelosani", // $2: user_role
+      role, // $2: user_role
       location.longitude, // $3: longitude
       location.latitude, // $4: latitude
       location.bbox, // $5: bbox
@@ -65,17 +65,18 @@ export const create_xelosani_location = async (req, res, next) => {
 
     if (location_data.rowCount > 0) {
       const user_step_percent_update_query = `
-                UPDATE users
-                    SET 
-                    "stepPercent" = "stepPercent" + 12.5,
-                    location_id = $2
-                WHERE role = 'xelosani' AND id = $1
-                RETURNING "stepPercent"
-            `;
+          UPDATE users
+              SET 
+              "stepPercent" = "stepPercent" + 12.5,
+              location_id = $2
+          WHERE role = $3 AND id = $1
+          RETURNING "stepPercent"
+      `;
 
       const data = await query(user_step_percent_update_query, [
         userId,
         location_data.rows[0].id,
+        role
       ]);
       await query("COMMIT");
       res.status(200).json({ stepPercent: data.stepPercent });
